@@ -10,19 +10,24 @@ let flock;
 let fishWidth = 1000;
 let fishHeight = 500;
 
+let maxFishNum = 200;
+let initialFishNum = maxFishNum / 2;
+var currentFishNum = initialFishNum;
+// counter that holds how many fish are available for population
+// catching fish adds to it
+// per timestep, population eats 2 fish from total
+let populationEatRate = -5;
+
 let populationBar;
-let populationTarget = 50;
+let populationTarget = initialFishNum / 2;
 
 let progressBar2;
 let progressWidth = 400;
 let progressHeight = 500;
 
 
-let initialFishNum = 100;
-// counter that holds how many fish are available for population
-// catching fish adds to it
-// per timestep, population eats 2 fish from total
-let populationEatRate = -2;
+
+
 
 function setup() {
   createCanvas(fishWidth + progressWidth, fishHeight);
@@ -30,7 +35,7 @@ function setup() {
 
   flock = new Flock();
   populationBar = new ProgressBar(color(255, 204, 0), 
-    initialFishNum, populationTarget, 
+    maxFishNum, initialFishNum, 
     populationTarget, populationEatRate);
   // Add an initial set of boids into the system
   for (let i = 0; i < initialFishNum; i++) {
@@ -48,7 +53,6 @@ function draw() {
   fill(255, 255, 255);
   rect(fishWidth, 0, progressWidth, progressHeight);
   
-
   flock.run();
   populationBar.run();
 
@@ -58,26 +62,47 @@ function draw() {
 
 // a "net" to catch fish
 function useNet(boids) {
-  let mouseVector = createVector(mouseX, mouseY);
-  // draws net
-  fill(127);
-  circle(mouseVector.x, mouseVector.y, 72);
-  // checks if fish are within net, have to loop thru all :(, maybe divide grid
-  // if enough time TODO
-  
-  for (let i = 0; i < boids.length; i++) {
-    if (p5.Vector.dist(boids[i].position, mouseVector) < 36) {
-      boids.splice(i, 1);
-      // add to fish caught, eg. population bar height
-      populationBar.changeBarHeight(1);
+  if (mouseIsPressed) {
+    var mouseVector = createVector(mouseX, mouseY);
+    // draws net
+    fill(127);
+
+    // don't let net go into progress part
+    if (mouseVector.x + 36 > fishWidth) {
+      circle(fishWidth - 36, mouseVector.y, 72);
+      mouseVector.x = fishWidth - 36;
+    } else {
+      circle(mouseVector.x, mouseVector.y, 72);
+    }
+
+    // checks if fish are within net, have to loop thru all :(, maybe divide grid
+    for (let i = 0; i < boids.length; i++) {
+      if (p5.Vector.dist(boids[i].position, mouseVector) < 36) {
+        boids.splice(i, 1);
+        // add to fish caught, eg. population bar height
+        populationBar.changeBarHeight(1);
+        // 1 less fish
+        currentFishNum -= 1;
+      }
     }
   }
-
 }
 
-// Add a new boid into the System
-function mouseDragged() {
-  flock.addBoid(new Boid(mouseX, mouseY));
+function respawnFish() {
+  // respawn rate is y = sin(x) form
+  // fish spawn slowly when pop low, fastest when pop med, and slow when pop high
+  // amplitude of sin(x) is max respawn rate -> 1/20 max pop
+  // 1/2 period of sin(x) should cover from 0 fish to max pop
+  let rate = floor((1/20 * maxFishNum) *  sin((PI / maxFishNum) * populationBar.barHeight));
+  // spawn fish in next to random fish
+  for (let i = 0; i < rate; i++) {
+    if (currentFishNum > 0) {
+      let randomFishPosition = flock.boids[floor(random(currentFishNum - 1))].position;
+      flock.addBoid(new Boid(randomFishPosition.x, randomFishPosition.y));
+    }
+  }
+  // add to current fish count
+  currentFishNum += rate;
 }
 
 function ProgressBar(color, totalElems, barHeight, target, delta) {
@@ -99,6 +124,8 @@ ProgressBar.prototype.run = function() {
   this.elapsedDelta += deltaTime;
   if (this.elapsedDelta >= this.updateInterval && this.barHeight > 0) {
     this.barHeight += this.delta;
+    if (currentFishNum > 0)
+      respawnFish();
     this.elapsedDelta = 0;
   }
 
