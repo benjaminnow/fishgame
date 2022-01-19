@@ -1,11 +1,9 @@
-// optimizations:
-// - divide into grid
-// - premake all boids, only some active, have innactive stack containing indices 
-//   of innactive that become active only when fish population should grow
-
+// ideas
+// - simulation with sliders
 
 
 let flock;
+var gameoverButton;
 
 let fishWidth = 1000;
 let fishHeight = 500;
@@ -15,13 +13,14 @@ let initialFishNum = maxFishNum / 2;
 var currentFishNum = initialFishNum;
 // counter that holds how many fish are available for population
 // catching fish adds to it
-// per timestep, population eats 2 fish from total
+// per timestep, population eats 5 fish from total
 let populationEatRate = -5;
 
 let populationBar;
 let populationTarget = initialFishNum / 2;
 
-let progressBar2;
+let fishPopulationBar;
+
 let progressWidth = 400;
 let progressHeight = 500;
 
@@ -30,13 +29,14 @@ let progressHeight = 500;
 
 
 function setup() {
-  createCanvas(fishWidth + progressWidth, fishHeight);
-  createP("Drag the mouse to generate new boids.");
+  let myCanvas = createCanvas(fishWidth + progressWidth, fishHeight);
+  myCanvas.parent("gamediv");
 
   flock = new Flock();
-  populationBar = new ProgressBar(color(255, 204, 0), 
-    maxFishNum, initialFishNum, 
-    populationTarget, populationEatRate);
+  populationBar = new ProgressBar(color(255, 204, 0), 1100,
+    maxFishNum, initialFishNum, populationEatRate);
+  fishPopulationBar = new ProgressBar(color(32, 176, 16), 1250,
+    maxFishNum, currentFishNum, 0);
   // Add an initial set of boids into the system
   for (let i = 0; i < initialFishNum; i++) {
     let b = new Boid(width / 2,height / 2);
@@ -45,19 +45,71 @@ function setup() {
 }
 
 function draw() {
-  // draw background of fish area
-  fill(51)
-  rect(0, 0, fishWidth, fishHeight);
+  // check game over condition before drawing/simulating any more
+  if (populationBar.barHeight <= 1 || fishPopulationBar.barHeight == 0) {
+    gameOverScreen();
+  } else {
+    // draw background of fish area
+    fill(16, 112, 176)
+    rect(0, 0, fishWidth, fishHeight);
 
-  // draw background of progress area
-  fill(255, 255, 255);
-  rect(fishWidth, 0, progressWidth, progressHeight);
-  
-  flock.run();
-  populationBar.run();
+    // draw background of progress area
+    fill(255, 255, 255);
+    rect(fishWidth, 0, progressWidth, progressHeight);
+    
+    flock.run();
 
-  // deletes boids that are within circle
-  useNet(flock.boids);
+    runPopulationBar();
+    populationBar.run();
+
+    runFishPopulationBar();
+    fishPopulationBar.run();
+
+    drawProgressText();
+
+    // deletes boids that are within circle
+    useNet(flock.boids);
+  }
+}
+
+function gameOverScreen() {
+  fill(191, 125, 17);
+  rect(0, 0, fishWidth + progressWidth, fishHeight);
+  fill(0);
+  textSize(100);
+  textAlign(CENTER);
+  text('Game Over', 725, 250);
+
+  gameoverButton = createButton('Play Again');
+  gameoverButton.position(700, 450);
+  gameoverButton.size(100);
+  gameoverButton.mousePressed(resetGame);
+}
+
+function resetGame() {
+  removeElements();
+  currentFishNum = initialFishNum;
+  populationBar.barHeight = initialFishNum;
+  fishPopulationBar.barHeight = initialFishNum;
+  // Add an initial set of boids into the system again after clearing out
+  // any remaining
+  flock.boids = [];
+  for (let i = 0; i < initialFishNum; i++) {
+    let b = new Boid(width / 2,height / 2);
+    flock.addBoid(b);
+  }
+}
+
+function drawProgressText() {
+  // draw text for progress section
+  textSize(16);
+  textAlign(RIGHT);
+  text('100%', 1375, 20);
+  text('100%', 1225, 20);
+  textAlign(CENTER);
+  textWrap(WORD);
+  text('Human Satisfaction', 1100, 425, 75);
+  text('Fish Population', 1250, 425, 75);
 }
 
 // a "net" to catch fish
@@ -93,7 +145,7 @@ function respawnFish() {
   // fish spawn slowly when pop low, fastest when pop med, and slow when pop high
   // amplitude of sin(x) is max respawn rate -> 1/20 max pop
   // 1/2 period of sin(x) should cover from 0 fish to max pop
-  let rate = floor((1/20 * maxFishNum) *  sin((PI / maxFishNum) * populationBar.barHeight));
+  let rate = ceil((1/20 * maxFishNum) *  sin((PI / maxFishNum) * currentFishNum));
   // spawn fish in next to random fish
   for (let i = 0; i < rate; i++) {
     if (currentFishNum > 0) {
@@ -105,45 +157,78 @@ function respawnFish() {
   currentFishNum += rate;
 }
 
-function ProgressBar(color, totalElems, barHeight, target, delta) {
+function setEatRate() {
+  // eat rate is form y = e^x + const
+  // population eats slowly when few fish and exponentially faster when more
+  // delta = e when bar height is max fish num / 100000
+  let delta = -floor(exp(populationBar.barHeight * maxFishNum / 6000)) - 5;
+  populationBar.setDelta(delta);
+}
+
+function ProgressBar(color, leftPx, totalElems, barHeight, delta) {
   this.barHeight = barHeight; // current bar height
-  this.target = target; // target bar height, ex. for sustainability or satisfy population
   this.delta = delta; // how many fish are lost per update interval
   this.color = color; // color of bar
+  this.leftPx = leftPx; // pixel loc of leftmost side of bar (kinda)
 
   this.updateInterval = 1000; // how quickly bar updates height
-  this.elapsedDelta = 0; // how many miliseconds have elapsed
+  this.elapsedTimeDelta = 0; // how many miliseconds have elapsed
 
   this.heightPx = progressHeight - 100; // how high up bar is in progress box
-  this.widthPx = progressWidth / 4;
+  this.widthPx = 75;
   this.unitHeightPx = this.heightPx / totalElems; // divide bar into units for each elem counting
 }
 
 ProgressBar.prototype.run = function() {
-  // update bar height with respect to delta if 1 second has elapsed
-  this.elapsedDelta += deltaTime;
-  if (this.elapsedDelta >= this.updateInterval && this.barHeight > 0) {
-    this.barHeight += this.delta;
-    if (currentFishNum > 0)
-      respawnFish();
-    this.elapsedDelta = 0;
-  }
-
   if (this.barHeight > 0) {
     fill(this.color);
     
     rectMode(CORNERS)
     // draw rect from lower left corner
-    rect(fishWidth + this.widthPx, 
+    noStroke();
+    rect(this.leftPx, 
       this.heightPx,
-      fishWidth + 1.75*this.widthPx,
+      this.leftPx + this.widthPx,
       this.heightPx - (this.barHeight * this.unitHeightPx));
-    rectMode(CORNER)
   }
+  // draw outlining rect
+  rectMode(CORNERS)
+  noFill();
+  stroke(51);
+  strokeWeight(4);
+  rect(this.leftPx, 
+    this.heightPx,
+    this.leftPx + this.widthPx,
+    4);
+  strokeWeight(1);
+  fill(0);
+  rectMode(CORNER);
+}
+
+function runPopulationBar() {
+  // update bar height with respect to delta if 1 second has elapsed
+  // update eating rate of population
+  // update fish respawn rate
+  populationBar.elapsedTimeDelta += deltaTime;
+  if (populationBar.elapsedTimeDelta >= populationBar.updateInterval && populationBar.barHeight > 0) {
+    setEatRate();
+    populationBar.barHeight += populationBar.delta;
+    if (currentFishNum > 0)
+      respawnFish();
+    populationBar.elapsedTimeDelta = 0;
+  }
+}
+
+function runFishPopulationBar() {
+  fishPopulationBar.barHeight = currentFishNum;
 }
 
 ProgressBar.prototype.changeBarHeight = function(delta) {
   this.barHeight += delta;
+}
+
+ProgressBar.prototype.setDelta = function(newDelta) {
+  this.delta = newDelta;
 }
 
 // The Nature of Code
@@ -152,7 +237,6 @@ ProgressBar.prototype.changeBarHeight = function(delta) {
 
 // Flock object
 // Does very little, simply manages the array of all the boids
-
 function Flock() {
   // An array for all the boids
   this.boids = []; // Initialize the array
@@ -238,7 +322,7 @@ Boid.prototype.seek = function(target) {
 Boid.prototype.render = function() {
   // Draw a triangle rotated in the direction of velocity
   let theta = this.velocity.heading() + radians(90);
-  fill(127);
+  fill(51);
   stroke(200);
   push();
   translate(this.position.x, this.position.y);
