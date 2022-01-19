@@ -7,21 +7,50 @@
 
 let flock;
 
+let fishWidth = 1000;
+let fishHeight = 500;
+
+let populationBar;
+let populationTarget = 50;
+
+let progressBar2;
+let progressWidth = 400;
+let progressHeight = 500;
+
+
+let initialFishNum = 100;
+// counter that holds how many fish are available for population
+// catching fish adds to it
+// per timestep, population eats 2 fish from total
+let populationEatRate = -2;
+
 function setup() {
-  createCanvas(1000, 500);
+  createCanvas(fishWidth + progressWidth, fishHeight);
   createP("Drag the mouse to generate new boids.");
 
   flock = new Flock();
+  populationBar = new ProgressBar(color(255, 204, 0), 
+    initialFishNum, populationTarget, 
+    populationTarget, populationEatRate);
   // Add an initial set of boids into the system
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < initialFishNum; i++) {
     let b = new Boid(width / 2,height / 2);
     flock.addBoid(b);
   }
 }
 
 function draw() {
-  background(51);
+  // draw background of fish area
+  fill(51)
+  rect(0, 0, fishWidth, fishHeight);
+
+  // draw background of progress area
+  fill(255, 255, 255);
+  rect(fishWidth, 0, progressWidth, progressHeight);
+  
+
   flock.run();
+  populationBar.run();
 
   // deletes boids that are within circle
   useNet(flock.boids);
@@ -31,6 +60,7 @@ function draw() {
 function useNet(boids) {
   let mouseVector = createVector(mouseX, mouseY);
   // draws net
+  fill(127);
   circle(mouseVector.x, mouseVector.y, 72);
   // checks if fish are within net, have to loop thru all :(, maybe divide grid
   // if enough time TODO
@@ -38,6 +68,8 @@ function useNet(boids) {
   for (let i = 0; i < boids.length; i++) {
     if (p5.Vector.dist(boids[i].position, mouseVector) < 36) {
       boids.splice(i, 1);
+      // add to fish caught, eg. population bar height
+      populationBar.changeBarHeight(1);
     }
   }
 
@@ -46,6 +78,45 @@ function useNet(boids) {
 // Add a new boid into the System
 function mouseDragged() {
   flock.addBoid(new Boid(mouseX, mouseY));
+}
+
+function ProgressBar(color, totalElems, barHeight, target, delta) {
+  this.barHeight = barHeight; // current bar height
+  this.target = target; // target bar height, ex. for sustainability or satisfy population
+  this.delta = delta; // how many fish are lost per update interval
+  this.color = color; // color of bar
+
+  this.updateInterval = 1000; // how quickly bar updates height
+  this.elapsedDelta = 0; // how many miliseconds have elapsed
+
+  this.heightPx = progressHeight - 100; // how high up bar is in progress box
+  this.widthPx = progressWidth / 4;
+  this.unitHeightPx = this.heightPx / totalElems; // divide bar into units for each elem counting
+}
+
+ProgressBar.prototype.run = function() {
+  // update bar height with respect to delta if 1 second has elapsed
+  this.elapsedDelta += deltaTime;
+  if (this.elapsedDelta >= this.updateInterval && this.barHeight > 0) {
+    this.barHeight += this.delta;
+    this.elapsedDelta = 0;
+  }
+
+  if (this.barHeight > 0) {
+    fill(this.color);
+    
+    rectMode(CORNERS)
+    // draw rect from lower left corner
+    rect(fishWidth + this.widthPx, 
+      this.heightPx,
+      fishWidth + 1.75*this.widthPx,
+      this.heightPx - (this.barHeight * this.unitHeightPx));
+    rectMode(CORNER)
+  }
+}
+
+ProgressBar.prototype.changeBarHeight = function(delta) {
+  this.barHeight += delta;
 }
 
 // The Nature of Code
@@ -155,9 +226,9 @@ Boid.prototype.render = function() {
 
 // Wraparound
 Boid.prototype.borders = function() {
-  if (this.position.x < -this.r)  this.position.x = width + this.r;
-  if (this.position.y < -this.r)  this.position.y = height + this.r;
-  if (this.position.x > width + this.r) this.position.x = -this.r;
+  if (this.position.x < -this.r)  this.position.x = fishWidth + this.r;
+  if (this.position.y < -this.r)  this.position.y = fishHeight + this.r;
+  if (this.position.x > fishWidth + this.r) this.position.x = -this.r;
   if (this.position.y > height + this.r) this.position.y = -this.r;
 }
 
