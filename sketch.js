@@ -92,7 +92,7 @@ function gameOverScreen() {
   text('Game Over', 500, 250);
 
   gameoverButton = createButton('Play Again');
-  gameoverButton.position(450, 700);
+  gameoverButton.position(475, 700);
   gameoverButton.size(100);
   gameoverButton.mousePressed(resetGame);
 }
