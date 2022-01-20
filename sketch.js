@@ -14,7 +14,7 @@ var currentFishNum = initialFishNum;
 // counter that holds how many fish are available for population
 // catching fish adds to it
 // per timestep, population eats 5 fish from total
-let populationEatRate = -5;
+let populationEatRate = 5;
 
 let populationBar;
 let populationTarget = initialFishNum / 2;
@@ -24,8 +24,11 @@ let fishPopulationBar;
 let progressWidth = 400;
 let progressHeight = 500;
 
+let countDownTimer;
+let playTime = 30;
 
-
+let bonusTimer;
+let bonusTime = 0;
 
 
 function setup() {
@@ -37,6 +40,10 @@ function setup() {
     maxFishNum, initialFishNum, populationEatRate);
   fishPopulationBar = new ProgressBar(color(32, 176, 16), 1250,
     maxFishNum, currentFishNum, 0);
+  
+  countDownTimer = new Timer(playTime);
+  bonusTimer = new Timer(bonusTime);
+
   // Add an initial set of boids into the system
   for (let i = 0; i < initialFishNum; i++) {
     let b = new Boid(width / 2,height / 2);
@@ -59,11 +66,15 @@ function draw() {
     
     flock.run();
 
-    runPopulationBar();
+    runPopulationBar(deltaTime);
     populationBar.run();
 
     runFishPopulationBar();
     fishPopulationBar.run();
+
+    runCountdownTimer(deltaTime);
+
+    runBonusTimer(deltaTime);
 
     drawProgressText();
 
@@ -74,14 +85,14 @@ function draw() {
 
 function gameOverScreen() {
   fill(191, 125, 17);
-  rect(0, 0, fishWidth + progressWidth, fishHeight);
+  rect(0, 0, fishWidth, fishHeight);
   fill(0);
   textSize(100);
   textAlign(CENTER);
-  text('Game Over', 725, 250);
+  text('Game Over', 500, 250);
 
   gameoverButton = createButton('Play Again');
-  gameoverButton.position(700, 450);
+  gameoverButton.position(450, 700);
   gameoverButton.size(100);
   gameoverButton.mousePressed(resetGame);
 }
@@ -91,6 +102,8 @@ function resetGame() {
   currentFishNum = initialFishNum;
   populationBar.barHeight = initialFishNum;
   fishPopulationBar.barHeight = initialFishNum;
+  countDownTimer.currTime = playTime;
+  bonusTimer.currTime = bonusTime;
   // Add an initial set of boids into the system again after clearing out
   // any remaining
   flock.boids = [];
@@ -108,8 +121,8 @@ function drawProgressText() {
   text('100%', 1225, 20);
   textAlign(CENTER);
   textWrap(WORD);
-  text('Human Satisfaction', 1100, 425, 75);
-  text('Fish Population', 1250, 425, 75);
+  text('Human Satisfaction', 1100, 325, 75);
+  text('Fish Population', 1250, 325, 75);
 }
 
 // a "net" to catch fish
@@ -160,9 +173,54 @@ function respawnFish() {
 function setEatRate() {
   // eat rate is form y = e^x + const
   // population eats slowly when few fish and exponentially faster when more
-  // delta = e when bar height is max fish num / 100000
-  let delta = -floor(exp(populationBar.barHeight * maxFishNum / 6000)) - 5;
+  // delta = e when bar height is max fish num / 6000
+  let delta = -floor(exp(populationBar.barHeight * maxFishNum / 6000)) - random(0.75*populationEatRate, 2*populationEatRate);
   populationBar.setDelta(delta);
+}
+
+function Timer(startTime) {
+  this.currTime = startTime;
+  this.elapsedTimeDelta = 0;
+}
+
+function drawCountdownTimer() {
+  textSize(24);
+  textAlign(RIGHT);
+  text('Seconds left: ', 1200, 425);
+  if (countDownTimer.currTime > 0) {
+    text(countDownTimer.currTime, 1250, 425);
+  } else {
+    text('YOU WIN!', 1325, 425);
+  }
+}
+
+function runCountdownTimer(dt) {
+  drawCountdownTimer();
+  countDownTimer.elapsedTimeDelta += dt;
+  if (countDownTimer.elapsedTimeDelta >= 1000) {
+    countDownTimer.currTime -= 1;
+    countDownTimer.elapsedTimeDelta = 0;
+  }
+}
+
+function drawBonusTimer() {
+  textSize(24);
+  textAlign(RIGHT);
+  if (countDownTimer.currTime <= 0) {
+    text('Bonus seconds: ', 1200, 450);
+    text(bonusTimer.currTime, 1250, 450);
+  }
+}
+
+function runBonusTimer(dt) {
+  drawBonusTimer();
+  if (countDownTimer.currTime <= 0) {
+    bonusTimer.elapsedTimeDelta += dt;
+    if (bonusTimer.elapsedTimeDelta >= 1000) {
+      bonusTimer.currTime += 1;
+      bonusTimer.elapsedTimeDelta = 0;
+    }
+  }
 }
 
 function ProgressBar(color, leftPx, totalElems, barHeight, delta) {
@@ -174,7 +232,7 @@ function ProgressBar(color, leftPx, totalElems, barHeight, delta) {
   this.updateInterval = 1000; // how quickly bar updates height
   this.elapsedTimeDelta = 0; // how many miliseconds have elapsed
 
-  this.heightPx = progressHeight - 100; // how high up bar is in progress box
+  this.heightPx = progressHeight - 200; // how high up bar is in progress box
   this.widthPx = 75;
   this.unitHeightPx = this.heightPx / totalElems; // divide bar into units for each elem counting
 }
@@ -205,11 +263,11 @@ ProgressBar.prototype.run = function() {
   rectMode(CORNER);
 }
 
-function runPopulationBar() {
+function runPopulationBar(dt) {
   // update bar height with respect to delta if 1 second has elapsed
   // update eating rate of population
   // update fish respawn rate
-  populationBar.elapsedTimeDelta += deltaTime;
+  populationBar.elapsedTimeDelta += dt;
   if (populationBar.elapsedTimeDelta >= populationBar.updateInterval && populationBar.barHeight > 0) {
     setEatRate();
     populationBar.barHeight += populationBar.delta;
